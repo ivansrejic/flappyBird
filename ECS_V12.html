@@ -4,237 +4,330 @@
 <body>
     </canvas>
     <script>
+    let windowW = 500;
+    let windowH = 500;
+    let fps = 30;
 
-        let windowW=500;
-        let windowH=500;
-        let fps = 30;
+    
 
-        function Entitiy(){
-            Entitiy.prototype._count++;
-            this.id = Entitiy.prototype._count;
-            this.componenets = {};
-            this.addComponent = function addComponent(componenet){
-                this.componenets[componenet.name] = componenet;
-                return this;
+    function Entitiy() {
+    Entitiy.prototype._count++;
+    this.id = Entitiy.prototype._count;
+    this.components = {};
+    this.addComponent = function addComponent(component) {
+        this.components[component.name] = component;
+        return this;
+    };
+    this.removeComponent = function removeComponent(component) {
+        delete this.components[component.name];
+        return this;
+    };
+    }
+
+    function Component(name, value) {
+    this.name = name;
+    this.value = value;
+    }
+
+    (function init() {
+    Entitiy.prototype._count = 0;
+    })();
+
+    let entities = [];
+
+    entities.push(
+    new Entitiy()
+        .addComponent(new Component("playerx", 50))
+        .addComponent(new Component("playery", 250))
+        .addComponent(new Component("jump", 0))
+        .addComponent(new Component("JumpSound", new Audio("jump_02.wav")))
+        .addComponent(new Component("vely", 0))
+        .addComponent(new Component("speedy", 0))
+        .addComponent(new Component("hit", 0))
+        .addComponent(new Component("score", 0))
+    );
+
+    entities.push(
+    new Entitiy()
+        .addComponent(new Component("x", 250))
+        .addComponent(new Component("y", 250))
+    );
+
+    entities.push(
+    new Entitiy()
+        .addComponent(new Component("x", 550))
+        .addComponent(new Component("y", 250))
+    );
+
+    entities.push(new Entitiy().addComponent(new Component("points", 0)));
+
+    let systems = [];
+
+    function userInputSystem(x) {
+    return x;
+    }
+
+    //User input system
+    userInputSystem = (function inputSystem() {
+    //Inicializacija
+    let downEvents = [];
+    let upEvents = [];
+    function handleKeyDown(event) {
+        downEvents.push(event.keyCode);
+        downEvents = [...new Set(downEvents)];
+    }
+
+    function handleKeyUp(event) {
+        upEvents.push(event.keyCode);
+        upEvents = [...new Set(upEvents)];
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    //System funkcija
+    return (entities) => {
+        let newEntities = [];
+        for (e of entities) {
+        //Keyboard:
+        if (
+            e.components.playerx !== undefined &&
+            e.components.playery !== undefined
+        ) {
+            if (downEvents.includes(38)) {
+            e.components.playery.value = e.components.playery.value + 0.01;
+            if (e.components.jump !== undefined) e.components.jump = true;
             }
-            this.removeComponent = function removeComponent(componenet){
-                delete this.componenets[componenet.name];
-                return this;
-            }
+            
+        }
+        //Mouse:
+        newEntities.push(e);
+        }
+        downEvents = downEvents.filter((value) => !upEvents.includes(value));
+        return newEntities;
+    };
+    })();
+
+    let pts = 0;
+    //Graphics System
+    
+    renderingSystem = (function graphicsSystem() {
+    //Graphics Init:
+    document.body.innerHTML +=
+        '<canvas id="window" width=' +
+        windowW +
+        " height=" +
+        windowH +
+        " ></canvas>";
+
+    let window = document.getElementById("window");
+
+    let ctx = window.getContext("2d");
+
+    let bird = new Image(100, 100);
+    bird.src = "bird.png";
+
+    let pipeUp = new Image(100, 500);
+    pipeUp.src = "pipeUp.png";
+
+    let pipeDown = new Image(100, 500);
+    pipeDown.src = "pipeDown.png";
+
+    return (entities) => {
+        //Graphics Loop
+        ctx.clearRect(0, 0, windowW, windowH);
+        //Clear
+        for (e of entities) {
+        if (e.components.playerx !== undefined) {
+            ctx.drawImage(
+            bird,
+            e.components.playerx.value,
+            e.components.playery.value,
+            50,
+            50
+            );
         }
 
-        function Componenet(name, value){
-            this.name = name;
-            this.value = value;
+        if (e.components.x !== undefined) {
+            ctx.drawImage(
+            pipeUp,
+            e.components.x.value,
+            e.components.y.value - 350 - 100,
+            100,
+            350
+            );
+            ctx.drawImage(
+            pipeDown,
+            e.components.x.value,
+            e.components.y.value + 120,
+            100,
+            350
+            );
+            //Debug Bird
+            //ctx.drawImage(bird, e.components.x.value , e.components.y.value, 10, 19);
+        }
+        if (e.components.points !== undefined) {
+            ctx.fillStyle = "#fff";
+            //ctx.fillRect(windowW / 2, windowH / 2, windowW / 2, windowH / 2);
+            ctx.strokeStyle = "#000";
+            //ctx.strokeRect(windowW / 2, windowH / 2, windowW / 2, windowH / 2);
+            ctx.fillStyle = "red";
+            ctx.font = "24px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("Score: " + pts, windowW / 2, windowH / 6);
+        }
+        }
+        return entities;
+}
+    })();
+
+    jumpSystem = function (entities) {
+    let newEntities = [];
+    for (e of entities) {
+        if (e.components.jump !== undefined) {
+        if (e.components.jump == true) {
+            e.components.speedy.value = -15;
+            e.components.jump = false;
+            e.components.JumpSound.value.play();
+        }
+        }
+        newEntities.push(e);
+    }
+    return newEntities;
+    };
+
+    physicsSystem = function (entities) {
+    let newEntities = [];
+    let g = 1;
+    let pSpeed = -10;
+
+
+    for (e of entities) {
+        //Gravavitacia:
+        if (e.components.playery !== undefined) {
+        e.components.speedy.value = e.components.speedy.value + g;
+        e.components.playery.value =
+            e.components.playery.value + e.components.speedy.value;
+        }
+        if (e.components.x !== undefined) {
+        e.components.x.value = e.components.x.value + pSpeed;
+
+        if (e.components.x.value < -75) {
+            e.components.x.value = windowW;
+            e.components.y.value = Math.random() * 175 + 100;
+            pts = pts + 1;
+        }
+        }
+        if (e.components.points !== undefined) {
         }
 
-        (function init(){
-            Entitiy.prototype._count = 0;
-            }())
+        newEntities.push(e);
+    }
+    return newEntities;
+    };
 
-        let entities = [];
+    collisionSystem = function (entities) {
+    let newEntities = [];
+    for (e of entities) {
+        if (e.components.playerx !== undefined) {
+        for (i of entities) {
+            if (i.components.x !== undefined && i.components.y !== undefined) {
+            //x
+            if (
+                e.components.playerx.value > i.components.x.value &&
+                e.components.playerx.value < i.components.x.value + 50
+            ) {
+                if (
+                !(
+                    e.components.playery.value > i.components.y.value - 100 &&
+                    e.components.playery.value < i.components.y.value + 100
+                )
+                )
+                e.components.hit.value = 1;
+            }
+            }
+        }
+        newEntities.push(e);
+        }
+    }
+    return newEntities;
+    };
 
-        entities.push(new Entitiy()
-            .addComponent(new Componenet('playerx', 50))
-            .addComponent(new Componenet('playery', 250))
-            .addComponent(new Componenet('jump', 0))
-            .addComponent(new Componenet('JumpSound', new Audio('jump_02.wav')))
-            .addComponent(new Componenet('vely', 0))
-            .addComponent(new Componenet('speedy', 0))
-            .addComponent(new Componenet('hit', 0))
+    // function gameOver(entities){
+    //     for(e of entities){
+    //         if(e.components.hit !== undefined){
+    //             if(e.components.hit.value === 1){
+    //                 alert("Game Over! \n Your socre is: " + pts)
+    //             }
+    //         }
+    //     }
+    //     return entities;
+    // }
+    let gameLoopInterval;
+
+    function gameOver(entities) {
+    for (e of entities) {
+        if (e.components.hit !== undefined) {
+        if (e.components.hit.value === 1) {
+            // Display game over message and score
+            document.body.innerHTML +=
+            '<canvas id="score" width=' +
+            windowW +
+            " height=" +
+            windowH +
+            ' style="position: absolute; top: 0; left: 0;"></canvas>';
+
+            let window = document.getElementById("window");
+            let ctx = window.getContext("2d");
+
+            ctx.fillStyle = "red";
+
+            // First text
+            ctx.font = "24px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(
+            "GAME OVER - YOUR SCORE IS: " + pts,
+            windowW / 2,
+            windowH / 6
             );
 
-        entities.push(new Entitiy()
-           .addComponent(new Componenet('x', 250))
-           .addComponent(new Componenet('y', 250)));
+            // // Second text
+            ctx.fillStyle = "green"; // Change to green
+            ctx.font = "bold 18px Arial"; // Bold and smaller font size
+            ctx.textAlign = "center";
+            ctx.fillText("press SPACE to try again", windowW / 2, windowH / 2);
 
-        entities.push(new Entitiy()
-           .addComponent(new Componenet('x', 550))
-           .addComponent(new Componenet('y', 250)));
+            document.body.addEventListener("keydown", function (event) {
+            if (event.keyCode === 32) {
+                location.reload();
+            }
+            });
 
-        entities.push(new Entitiy()
-            .addComponent(new Componenet('points', 0)));
-   
-        let systems = [];
+            // Stop the game loop by clearing the interval
+            clearInterval(gameLoopInterval);
 
-        function userInputSystem(x){
-            return x
         }
-
-        //User input system
-        userInputSystem = (function inputSystem(){
-            //Inicializacija
-            let downEvents = []
-            let upEvents = []
-            function handleKeyDown(event) {
-                    downEvents.push(event.keyCode)
-                    downEvents = [...(new Set(downEvents))];
-                }
-
-            function handleKeyUp(event) {
-                    upEvents.push(event.keyCode)
-                    upEvents = [...(new Set(upEvents))];
-                }
-
-            window.addEventListener('keydown', handleKeyDown);
-            window.addEventListener('keyup', handleKeyUp);
-            //System funkcija
-            return (entities) =>{
-                let newEntities = []
-                for(e of entities){
-                    //Keyboard:
-                    if(e.componenets.playerx !== undefined && e.componenets.playery !== undefined)
-                        {
-                            if(downEvents.includes(38)){
-                                e.componenets.playery.value = e.componenets.playery.value + 0.01;
-                                if(e.componenets.jump !== undefined)
-                                    e.componenets.jump = true
-                            }
-                        }
-                    //Mouse:
-                    newEntities.push(e)
-                }
-                downEvents = downEvents.filter(value => !upEvents.includes(value));
-                return newEntities;
-            } 
-        })()
-
-        let pts= 0;
-
-        //Graphics System
-        renderingSystem = (function graphicsSystem(){
-
-            //Graphics Init:
-            document.body.innerHTML += '<canvas id="window" width=' + windowW + ' height=' + windowH + ' ></canvas>';
-            
-            let window = document.getElementById('window');
-            let ctx = window.getContext('2d');
-
-            let bird = new Image(100, 100);
-            bird.src = "bird.png"
-
-            let pipeUp = new Image(100, 500);
-            pipeUp.src = "pipeUp.png"
-
-            let pipeDown = new Image(100, 500);
-            pipeDown.src = "pipeDown.png"
-
-
-            return(entities) =>{
-                //Graphics Loop
-                ctx.clearRect(0,0,windowW,windowH)
-                //Clear
-                for(e of entities){
-
-                    if(e.componenets.playerx !== undefined){
-                        ctx.drawImage(bird, e.componenets.playerx.value, e.componenets.playery.value, 50, 50);
-                    }
-
-                    if(e.componenets.x !== undefined){
-                        ctx.drawImage(pipeUp, e.componenets.x.value , e.componenets.y.value-350-100, 100, 350);
-                        ctx.drawImage(pipeDown, e.componenets.x.value , e.componenets.y.value+120, 100, 350);
-                        //Debug Bird
-                        //ctx.drawImage(bird, e.componenets.x.value , e.componenets.y.value, 10, 19);
-                    }
-                }
-                return entities;
-            }
-        }())
-
-        jumpSystem = function(entities){
-            let newEntities = []
-            for(e of entities){
-                if(e.componenets.jump !== undefined){
-                    if(e.componenets.jump == true){
-                        e.componenets.speedy.value = -15
-                        e.componenets.jump = false
-                        e.componenets.JumpSound.value.play()
-                    }
-                }
-                newEntities.push(e)
-            }
-            return newEntities
         }
-        
-        physicsSystem = function(entities){
-            let newEntities = []
-            let g = 1;
-            let pSpeed = -10;
+    }
+    return entities;
+    }
+    systems.push(userInputSystem);
+    systems.push(jumpSystem);
+    systems.push(physicsSystem);
+    systems.push(renderingSystem);
+    systems.push(collisionSystem);
+    systems.push(gameOver);
 
-            for(e of entities){
-                //Gravavitacia:
-                if(e.componenets.playery !== undefined){
-                    e.componenets.speedy.value = e.componenets.speedy.value + g;
-                    e.componenets.playery.value = e.componenets.playery.value + e.componenets.speedy.value;
-                }
-                if(e.componenets.x !== undefined){
-                    e.componenets.x.value = e.componenets.x.value + pSpeed;
+    function game(entities, systems) {
+    for (s of systems) {
+        entities = s(Object.freeze(entities));
+    }
+    }
 
-                    if(e.componenets.x.value<-75){
-                        e.componenets.x.value = windowW;
-                        e.componenets.y.value = Math.random() * 175 + 100
-                        pts = pts + 1;
-                    }
-            }
-                if(e.componenets.points !== undefined){ 
+    //Set interval kao dleta time
+    gameLoopInterval = setInterval(() => {
+    game(entities, systems);
+    }, 1000 / fps);
 
-                }  
-                
-                newEntities.push(e)
-            }
-            return newEntities
-        }
-
-        collisionSystem = function (entities){
-            let newEntities = []
-            for(e of entities){
-                if(e.componenets.playerx !== undefined){
-                    for(i of entities)
-                        {
-                            if(i.componenets.x !== undefined && i.componenets.y !== undefined){
-                                //x 
-                                if(e.componenets.playerx.value > i.componenets.x.value && e.componenets.playerx.value < i.componenets.x.value + 50)
-                                {
-                                    if(!(e.componenets.playery.value > i.componenets.y.value-100 
-                                    && e.componenets.playery.value < i.componenets.y.value+100))
-                                        e.componenets.hit.value = 1;
-                                }
-                            }
-                        }
-                    newEntities.push(e);
-                }
-            }
-            return newEntities
-        }
-
-        function gameOver(entities){
-            for(e of entities){
-                if(e.componenets.hit !== undefined){
-                    if(e.componenets.hit.value === 1){
-                        alert("Game Over! \n Your socre is: " + pts)
-                    }
-                }
-            }
-            return entities;
-        } 
-        systems.push(userInputSystem)
-        systems.push(jumpSystem)
-        systems.push(physicsSystem)
-        systems.push(renderingSystem)
-        systems.push(collisionSystem)
-        systems.push(gameOver)
-
-        function game(entities, systems){
-            for(s of systems)
-                {
-                    entities = s(Object.freeze(entities))
-                }                   
-        }
-
-        //Set interval kao dleta time
-        setInterval(() => {
-                game(entities, systems);
-            }, 1000/fps);
 
     </script> 
 </body>
